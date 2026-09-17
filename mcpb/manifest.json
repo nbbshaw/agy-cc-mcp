@@ -1,0 +1,111 @@
+{
+  "manifest_version": "0.3",
+  "name": "agy-bridge",
+  "display_name": "Antigravity (agy) Bridge",
+  "version": "1.2.4",
+  "description": "Delegate coding work to Google Antigravity (Gemini) from Claude.",
+  "long_description": "Exposes the Google Antigravity CLI (agy) as MCP tools so Claude can hand test-writing, boilerplate and other mechanical coding work to Gemini and get back a digest plus a git diff instead of a wall of output. Also exposes agy slash commands and arbitrary flags. Every run is forced onto the signed-in Google account: metered API-key and Vertex credentials are stripped from the child environment before agy starts.",
+  "author": {
+    "name": "Nikolas Bradshaw"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "server/agy-bridge.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/server/agy-bridge.mjs"
+      ],
+      "env": {
+        "AGY_WSL_DISTRO": "${user_config.wsl_distro}",
+        "AGY_ALLOWED_ROOTS": "${user_config.allowed_roots}",
+        "AGY_DEFAULT_MODEL": "${user_config.default_model}",
+        "AGY_MAX_CHARS": "${user_config.max_chars}",
+        "AGY_BIN": "${user_config.agy_bin}"
+      }
+    }
+  },
+  "user_config": {
+    "wsl_distro": {
+      "type": "string",
+      "title": "WSL distro",
+      "description": "Name of the WSL distro where agy is installed and logged in, e.g. Ubuntu. Check with `wsl -l -q`. Leave EMPTY on macOS/Linux, or if agy is installed natively on Windows.",
+      "required": false,
+      "default": "Ubuntu"
+    },
+    "allowed_roots": {
+      "type": "string",
+      "title": "Allowed write roots",
+      "description": "Colon-separated directories Gemini may write in. Use paths as the machine running agy sees them \u2014 with a WSL distro set, that means WSL paths like /mnt/c/Users/you/Documents/GitHub. Nothing outside these runs in write mode.",
+      "required": true,
+      "default": "/mnt/c/Users/nbbsh/Documents/GitHub:/mnt/c/Users/nbbsh/Documents/Projects"
+    },
+    "default_model": {
+      "type": "string",
+      "title": "Default model slug",
+      "description": "Model used when a call does not pin one. Must appear in `agy models` or Antigravity will silently substitute another.",
+      "required": false,
+      "default": "gemini-3.8-flash-high"
+    },
+    "max_chars": {
+      "type": "number",
+      "title": "Digest size (characters)",
+      "description": "How much of Gemini's response is kept in Claude's context. The full transcript always goes to a file on disk.",
+      "required": false,
+      "default": 6000,
+      "min": 500,
+      "max": 100000
+    },
+    "agy_bin": {
+      "type": "string",
+      "title": "agy binary",
+      "description": "Path to the agy executable. Leave as `agy` unless it is not on PATH.",
+      "required": false,
+      "default": "agy"
+    }
+  },
+  "tools": [
+    {
+      "name": "delegate",
+      "description": "Run a coding task on a Gemini model via agy; supports plan mode; returns a digest plus the git diffstat"
+    },
+    {
+      "name": "command",
+      "description": "Run an agy slash command such as /usage, /plan or /teamwork-preview"
+    },
+    {
+      "name": "help",
+      "description": "Discover this agy install's flags and slash commands"
+    },
+    {
+      "name": "raw",
+      "description": "Run agy with arbitrary arguments"
+    },
+    {
+      "name": "models",
+      "description": "List the model slugs this agy install can reach"
+    },
+    {
+      "name": "doctor",
+      "description": "Check the agy binary, auth path and bridge configuration"
+    }
+  ],
+  "keywords": [
+    "antigravity",
+    "gemini",
+    "agy",
+    "delegation",
+    "codegen"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": [
+      "win32",
+      "darwin",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}

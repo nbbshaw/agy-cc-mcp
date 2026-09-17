@@ -1,0 +1,11 @@
+# Local Claude Desktop config — contains account UUIDs, session ids and paired
+# device ids. Never commit this.
+claude_desktop_config*.json
+
+# Build output
+*.mcpb.bak
+node_modules/
+
+# agy scratch
+PLANMODE_TEST.txt
+*.log
