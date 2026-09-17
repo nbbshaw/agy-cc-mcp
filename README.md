@@ -140,6 +140,27 @@ auto-denied and you get an empty response. Use `mode: "plan"` for read-only work
 
 **Briefs are self-contained.** The delegate sees your repo, not your conversation.
 
+## Developing on the bridge
+
+The packaged `.mcpb` carries its own copy of `agy-bridge.mjs`, so editing the source has
+no effect until you repack and reinstall. `agy-bridge-dev.mcpb` avoids that loop: it
+contains only a loader that imports whatever file you point **Bridge source file** at, so
+an edit takes effect on the next server restart.
+
+```
+Settings -> Extensions -> Install Extension... -> agy-bridge-dev.mcpb
+  Bridge source file: <your working copy of agy-bridge.mjs>
+```
+
+Disable the packaged extension while the dev one is enabled — both expose the same tool
+names, and having two servers answering to `delegate` is nothing but confusing. Repack for
+normal use with:
+
+```bash
+cp agy-bridge.mjs mcpb/server/agy-bridge.mjs
+cd mcpb && zip -r ../agy-bridge.mcpb manifest.json server   # or: mcpb pack
+```
+
 ## Implementation notes
 
 Two things that cost real debugging time, recorded so they don't have to again:

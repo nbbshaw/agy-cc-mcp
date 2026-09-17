@@ -2,6 +2,9 @@
 
 ## 1.2.4
 
+- Add `agy-bridge-dev.mcpb`: loads the bridge from a working copy on disk so iterating
+  needs a server restart rather than a repack and reinstall.
+
 - Fix: commands were corrupted crossing the Windows argv → `wsl.exe` → bash boundary
   (`unexpected EOF while looking for matching '"'`) once they contained more than a
   couple of double quotes. The inner script is now base64-encoded so the Windows command

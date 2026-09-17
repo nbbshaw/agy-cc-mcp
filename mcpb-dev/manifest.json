@@ -1,0 +1,82 @@
+{
+  "manifest_version": "0.3",
+  "name": "agy-bridge-dev",
+  "display_name": "Antigravity (agy) Bridge — dev",
+  "version": "1.2.4",
+  "description": "Development build of the agy bridge: runs your working copy on disk, so edits need only a server restart.",
+  "long_description": "Identical to the agy bridge extension except that it loads the server from a file you point it at rather than from a copy inside the bundle. Install this while iterating on the bridge, and the packaged build for normal use. Do not enable both at once — they expose the same tool names.",
+  "author": { "name": "Nikolas Bradshaw" },
+  "server": {
+    "type": "node",
+    "entry_point": "server/dev-loader.mjs",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/dev-loader.mjs"],
+      "env": {
+        "AGY_DEV_ENTRY": "${user_config.dev_entry}",
+        "AGY_WSL_DISTRO": "${user_config.wsl_distro}",
+        "AGY_ALLOWED_ROOTS": "${user_config.allowed_roots}",
+        "AGY_DEFAULT_MODEL": "${user_config.default_model}",
+        "AGY_MAX_CHARS": "${user_config.max_chars}",
+        "AGY_BIN": "${user_config.agy_bin}"
+      }
+    }
+  },
+  "user_config": {
+    "dev_entry": {
+      "type": "file",
+      "title": "Bridge source file",
+      "description": "Your working copy of agy-bridge.mjs. This file is read at server start, so edits take effect on the next restart.",
+      "required": true,
+      "default": "${HOME}/Documents/GitHub/agy-cc-mcp/agy-bridge.mjs"
+    },
+    "wsl_distro": {
+      "type": "string",
+      "title": "WSL distro",
+      "description": "Distro where agy is installed and logged in (`wsl -l -q`). Leave empty on macOS/Linux or for a native Windows agy.",
+      "required": false,
+      "default": "Ubuntu-26.04"
+    },
+    "allowed_roots": {
+      "type": "string",
+      "title": "Allowed write roots",
+      "description": "Colon-separated directories Gemini may write in, as the machine running agy sees them.",
+      "required": true,
+      "default": "/mnt/c/Users/nbbsh/Documents/GitHub:/mnt/c/Users/nbbsh/Documents/Projects"
+    },
+    "default_model": {
+      "type": "string",
+      "title": "Default model slug",
+      "required": false,
+      "default": "gemini-3.8-flash-high"
+    },
+    "max_chars": {
+      "type": "number",
+      "title": "Digest size (characters)",
+      "required": false,
+      "default": 6000,
+      "min": 500,
+      "max": 100000
+    },
+    "agy_bin": {
+      "type": "string",
+      "title": "agy binary",
+      "required": false,
+      "default": "agy"
+    }
+  },
+  "tools": [
+    { "name": "delegate", "description": "Run a coding task on a Gemini model via agy; supports plan mode; returns a digest plus the git diffstat" },
+    { "name": "command", "description": "Run an agy slash command" },
+    { "name": "help", "description": "Discover this agy install's flags and slash commands" },
+    { "name": "raw", "description": "Run agy with arbitrary arguments" },
+    { "name": "models", "description": "List reachable model slugs" },
+    { "name": "doctor", "description": "Check binary, auth path and bridge configuration" }
+  ],
+  "keywords": ["antigravity", "gemini", "agy", "development"],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": ["win32", "darwin", "linux"],
+    "runtimes": { "node": ">=18.0.0" }
+  }
+}
