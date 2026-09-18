@@ -45,7 +45,7 @@ import path from "node:path";
 // ---------------------------------------------------------------------------
 
 const SERVER_NAME = "agy-bridge";
-const SERVER_VERSION = "1.2.4";
+const SERVER_VERSION = "1.3.0";
 const DEFAULT_PROTOCOL = "2025-06-18";
 
 const toInt = (v, d) => {
@@ -1133,6 +1133,49 @@ const send = (msg) => process.stdout.write(JSON.stringify(msg) + "\n");
 const reply = (id, result) => send({ jsonrpc: "2.0", id, result });
 const replyError = (id, code, message) => send({ jsonrpc: "2.0", id, error: { code, message } });
 
+// --- progress heartbeat ------------------------------------------------------
+//
+// A real delegation runs for minutes; an MCP client's per-request timeout is
+// typically 60s. Without this, every useful `delegate` call died with "Request
+// timed out" on the client while the agy process carried on editing files in
+// the background — the worst possible outcome, because the work landed but the
+// caller was told it had failed and never received the digest.
+//
+// The MCP spec's answer is `notifications/progress`: a client that wants them
+// puts a `progressToken` in `params._meta`, and each notification carrying that
+// token resets the client's timeout for that request. So we simply beat once
+// every HEARTBEAT_MS for as long as the tool is running.
+//
+// Notes on the shape:
+//  * `progress` MUST increase monotonically, so it is elapsed seconds.
+//  * `total` is the run's own timeout when we know it, which lets the client
+//    render a real bar instead of a spinner. We deliberately omit it rather
+//    than guess when the tool has no timeout of its own.
+//  * A client that sends no progressToken gets no notifications — which is the
+//    old behaviour, so this cannot regress a client that does not want them.
+// Configurable so a test can drive it far faster than a human ever would; 10s is
+// comfortably inside every MCP client timeout worth worrying about.
+const HEARTBEAT_MS = toInt(process.env.AGY_PROGRESS_INTERVAL_MS, 10_000);
+
+function startHeartbeat(progressToken, { label, totalSeconds }) {
+  if (progressToken === undefined || progressToken === null) return () => {};
+  const started = Date.now();
+  const beat = () => {
+    const elapsed = Math.round((Date.now() - started) / 1000);
+    const params = {
+      progressToken,
+      progress: elapsed,
+      message: `${label}: running, ${elapsed}s elapsed`,
+    };
+    if (totalSeconds) params.total = totalSeconds;
+    send({ jsonrpc: "2.0", method: "notifications/progress", params });
+  };
+  const timer = setInterval(beat, HEARTBEAT_MS);
+  // Never hold the event loop open on the heartbeat alone.
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
+
 async function handle(msg) {
   const { id, method, params } = msg;
   const isNotification = id === undefined || id === null;
@@ -1174,10 +1217,21 @@ async function handle(msg) {
         replyError(id, -32602, `Unknown tool: ${name}`);
         return;
       }
+      const args = params?.arguments ?? {};
+      // Beat for the whole life of the call, so a multi-minute delegation is not
+      // killed by the client's 60s request timeout. `timeout_seconds` is the
+      // run's own ceiling where the tool takes one; `undefined` simply means the
+      // bar has no known end, not that the beat stops.
+      const stopHeartbeat = startHeartbeat(params?._meta?.progressToken, {
+        label: name,
+        totalSeconds: toInt(args.timeout_seconds, 0) || undefined,
+      });
       try {
-        reply(id, await fn(params?.arguments ?? {}));
+        reply(id, await fn(args));
       } catch (e) {
         reply(id, err(`${name} failed: ${e?.stack || e?.message || String(e)}`));
+      } finally {
+        stopHeartbeat();
       }
       return;
     }
