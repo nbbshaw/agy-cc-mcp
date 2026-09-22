@@ -18,7 +18,8 @@
  *   AGY_BIN            path to the agy binary            (default: "agy")
  *   AGY_WSL_DISTRO     if set, every command is run as `wsl.exe -d <distro> -- bash -lc ...`
  *                      (use this when the MCP client runs on Windows but agy lives in WSL).
- *                      In WSL mode all paths are WSL paths, e.g. /home/you/code/repo
+ *                      In WSL mode paths are WSL paths, e.g. /home/you/code/repo; Windows
+ *                      paths (C:\code\repo) passed to a tool are translated to /mnt/c/...
  *   AGY_ALLOWED_ROOTS  path-separated list of directories delegation may run in.
  *                      Required for write mode. Separator is ":" except on native
  *                      Windows without AGY_WSL_DISTRO, where it is ";"
@@ -45,7 +46,7 @@ import path from "node:path";
 // ---------------------------------------------------------------------------
 
 const SERVER_NAME = "agy-bridge";
-const SERVER_VERSION = "1.3.0";
+const SERVER_VERSION = "1.3.1";
 const DEFAULT_PROTOCOL = "2025-06-18";
 
 const toInt = (v, d) => {
@@ -119,9 +120,33 @@ const augmentedEnv = () => {
 // path handling
 // ---------------------------------------------------------------------------
 
+// Claude Code on Windows hands over C:\... paths, but in WSL mode agy runs inside
+// the distro and only understands /mnt/c/... — translate them rather than refuse.
+const WIN_DRIVE_RE = /^([A-Za-z]):(?:[\\/]|$)/;
+const WSL_UNC_RE = /^[\\/]{2}wsl(?:\.localhost|\$)[\\/][^\\/]+/i;
+
+const toWslPath = (p) => {
+  const drive = WIN_DRIVE_RE.exec(p);
+  if (drive) return `/mnt/${drive[1].toLowerCase()}/${p.slice(drive[0].length)}`;
+  const unc = WSL_UNC_RE.exec(p);
+  if (unc) return p.slice(unc[0].length) || "/";
+  return p;
+};
+
+/**
+ * The Windows path for a /mnt/<drive> path, when the bridge itself runs on Windows
+ * in WSL mode; null otherwise.
+ */
+const toHostPath = (p) => {
+  if (!USE_WSL || process.platform !== "win32") return null;
+  const m = /^\/mnt\/([a-z])(?:\/|$)/i.exec(p);
+  return m ? `${m[1].toUpperCase()}:\\${p.slice(m[0].length).replace(/\//g, "\\")}` : null;
+};
+
 const normalizePath = (p) => {
   if (!p) return p;
-  if (USE_WSL || !IS_WIN) return path.posix.normalize(p.replace(/\\/g, "/"));
+  if (USE_WSL) return path.posix.normalize(toWslPath(p).replace(/\\/g, "/"));
+  if (!IS_WIN) return path.posix.normalize(p.replace(/\\/g, "/"));
   return path.win32.normalize(p);
 };
 
@@ -152,13 +177,13 @@ const defaultCwd = () => CFG.allowedRoots[0] || (USE_WSL ? "/" : process.cwd());
 const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 /**
- * Run a command, optionally through WSL. Returns {code, signal, stdout, stderr, timedOut}.
- * Never throws for a non-zero exit.
+ * Run a command, through WSL when configured unless `native` is set. Returns
+ * {code, signal, stdout, stderr, timedOut}. Never throws for a non-zero exit.
  */
-function run(bin, args, { cwd, timeoutMs, stdin }) {
+function run(bin, args, { cwd, timeoutMs, stdin, native = false }) {
   return new Promise((resolve) => {
     let child;
-    if (USE_WSL) {
+    if (USE_WSL && !native) {
       // `bash -lc` sources the WSL user's profile, so a GEMINI_API_KEY exported
       // there would survive scrubbing on the Windows side. Unset it inside too.
       const scrub = CFG.forceOauth ? `unset ${METERED_AUTH_VARS.join(" ")}; ` : "";
@@ -233,15 +258,24 @@ function run(bin, args, { cwd, timeoutMs, stdin }) {
 
 const runAgy = (args, opts) => run(CFG.bin, args, opts);
 
+/**
+ * In WSL mode a repo under /mnt/<drive> is a Windows checkout, so ask Windows git
+ * about it. Git inside the distro can't follow a worktree's `gitdir: C:/...` pointer
+ * (which is every Claude Code worktree), and with core.autocrlf it reports every
+ * text file as modified. Falls back to git in the distro if Windows git isn't found.
+ */
 async function gitInfo(cwd) {
-  const head = await run("git", ["-C", cwd, "rev-parse", "--short", "HEAD"], {
-    cwd,
-    timeoutMs: 15000,
-  });
+  const host = toHostPath(cwd);
+  return (host && (await gitInfoAt(host, true))) || gitInfoAt(cwd, false);
+}
+
+async function gitInfoAt(cwd, native) {
+  const git = (args, timeoutMs) => run("git", ["-C", cwd, ...args], { cwd, timeoutMs, native });
+  const head = await git(["rev-parse", "--short", "HEAD"], 15000);
   if (head.code !== 0) return null;
   const [stat, status] = await Promise.all([
-    run("git", ["-C", cwd, "diff", "--stat"], { cwd, timeoutMs: 20000 }),
-    run("git", ["-C", cwd, "status", "--porcelain=v1"], { cwd, timeoutMs: 20000 }),
+    git(["diff", "--stat"], 20000),
+    git(["status", "--porcelain=v1"], 20000),
   ]);
   return {
     head: head.stdout.trim(),
@@ -457,7 +491,7 @@ async function toolDelegate(args) {
   if (args.agent) agyArgs.push("--agent", String(args.agent));
   if (mode) agyArgs.push("--mode", mode);
   if (args.conversation_id) agyArgs.push("--conversation", String(args.conversation_id));
-  if (Array.isArray(args.add_dir)) for (const d of args.add_dir) agyArgs.push("--add-dir", String(d));
+  if (Array.isArray(args.add_dir)) for (const d of args.add_dir) agyArgs.push("--add-dir", normalizePath(String(d)));
   if (skipPermissions) agyArgs.push("--dangerously-skip-permissions");
   if (args.sandbox === true) agyArgs.push("--sandbox");
 
@@ -964,7 +998,10 @@ const ALL_TOOLS = [
           type: "string",
           description:
             "Absolute path to the repo or subdirectory to work in. Must be inside AGY_ALLOWED_ROOTS." +
-            (USE_WSL ? " Use the WSL path (e.g. /home/you/code/repo)." : ""),
+            (USE_WSL
+              ? " agy runs in WSL: a WSL path (/home/you/code/repo) or a Windows path (C:\\code\\repo, " +
+                "translated to /mnt/c/code/repo) both work."
+              : ""),
         },
         write: {
           type: "boolean",
