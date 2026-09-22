@@ -1,0 +1,15 @@
+{
+  "name": "agy-bridge",
+  "private": true,
+  "description": "MCP server exposing the Google Antigravity CLI (agy) to Claude. No runtime dependencies; this file only holds scripts.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:heartbeat": "node test/progress-heartbeat.mjs",
+    "test:wsl": "node test/wsl-paths.mjs",
+    "check": "node scripts/check-release.mjs"
+  }
+}

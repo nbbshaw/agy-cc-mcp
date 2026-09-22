@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+- **Fix: the digest no longer misreports an unstaged change as staged.** The digest
+  trimmed the whole `git status --porcelain` output, which removed the leading space of
+  the first line. That space is part of git's status code, so an unstaged ` M file` showed
+  up as `M file`, which reads as staged. The new test suite found this.
+
+- **Fix: plan mode now reliably picks the plan file.** The lookup searched each file's
+  whole path for "plan", not just its name. If the conversation id or `$HOME` contained
+  "plan", every candidate matched. The bridge then took whichever file `find` listed first,
+  which could be the wrong one depending on filesystem order. The macOS CI run caught this.
+  The lookup now matches the filename only and sorts the candidates.
+
+- Add a `node:test` suite, run with `npm test`. It covers the MCP plumbing, every tool,
+  the dev loader and release packaging. The suite drives the real server over stdio with a
+  scriptable stub in place of agy that records the argv, cwd, env and stdin of every call,
+  so it needs no agy install and makes no model call. Stub-based tests run on Linux and
+  macOS, or in WSL. On native Windows they are skipped, because node can't spawn a shebang
+  script with `shell: false`.
+
+- Add `scripts/check-release.mjs`. It fails when `SERVER_VERSION`, the two manifests and
+  this changelog disagree, or when `mcpb/server/agy-bridge.mjs` has drifted from the
+  source. That drift is the stale bundle 1.3.0 shipped.
+
+- Add `scripts/pack.mjs`. It builds both `.mcpb` bundles, the standalone script and
+  `SHA256SUMS` into `dist/`. It needs no `zip` binary, so it works in PowerShell too. Its
+  output is reproducible because line endings and zip timestamps are fixed. It packs the root `agy-bridge.mjs`, so a stale
+  `mcpb/server/` copy can no longer ship.
+
+- GitHub Actions: CI runs on every push and PR (Linux on Node 18, 22 and 24, plus macOS
+  and Windows) and uploads the built bundles as an artifact. Pushing a `v*` tag reruns CI,
+  checks that the tag is on `main` and matches the version, and then publishes a GitHub
+  release. The release carries the bundles and checksums, with notes taken from this file.
+
 ## 1.3.1
 
 - **Fix: Windows paths are translated in WSL mode instead of refused.** Claude Code on

@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Tag must be on main
+        run: |
+          set -euo pipefail
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Commit $GITHUB_SHA for tag $TAG is not an ancestor of origin/main"
+            exit 1
+          fi
+
+      - name: Check release consistency
+        run: node scripts/check-release.mjs "$TAG"
+
+      - name: Pack bundles and verify checksums
+        run: |
+          set -euo pipefail
+          node scripts/pack.mjs --out dist
+          cd dist && sha256sum -c SHA256SUMS
+
+      - name: Extract release notes
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          awk -v ver="$VERSION" '
+            { sub(/\r$/, "") }
+            $0 ~ ("^## v?" ver "([[:space:]]|$)") { in_sec = 1; next }
+            in_sec && /^## / { in_sec = 0; exit }
+            in_sec { print }
+          ' CHANGELOG.md > dist/NOTES.md
+          if [ ! -s dist/NOTES.md ] || ! grep -q '[^[:space:]]' dist/NOTES.md; then
+            echo "::error::Release notes for version $VERSION are empty in CHANGELOG.md"
+            exit 1
+          fi
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          EXTRA_ARGS=()
+          if [[ "$TAG" == *-* ]]; then
+            EXTRA_ARGS+=("--prerelease")
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists; uploading assets with --clobber"
+            gh release upload "$TAG" \
+              dist/agy-bridge.mcpb \
+              dist/agy-bridge-dev.mcpb \
+              dist/agy-bridge.mjs \
+              dist/SHA256SUMS \
+              --clobber
+          else
+            echo "Creating release $TAG"
+            gh release create "$TAG" \
+              dist/agy-bridge.mcpb \
+              dist/agy-bridge-dev.mcpb \
+              dist/agy-bridge.mjs \
+              dist/SHA256SUMS \
+              --title "agy-bridge $VERSION" \
+              --notes-file dist/NOTES.md \
+              --verify-tag \
+              "${EXTRA_ARGS[@]}"
+          fi

@@ -280,7 +280,9 @@ async function gitInfoAt(cwd, native) {
   return {
     head: head.stdout.trim(),
     diffstat: stat.stdout.trim(),
-    porcelain: status.stdout.trim(),
+    // trimEnd, not trim: the first porcelain line's leading space is its status
+    // column (" M" = unstaged), and trimming it would report "M" (staged).
+    porcelain: status.stdout.trimEnd(),
   };
 }
 
@@ -379,8 +381,10 @@ async function readPlanArtifactOnce(conversationId) {
   // Search the agy state tree for anything belonging to this conversation.
   const base = `$HOME/.gemini/antigravity-cli`;
   const script =
-    `c=$(find "${base}" -maxdepth 6 -type f -name '*.md' -path "*${id}*" ! -name 'walkthrough.md' 2>/dev/null); ` +
-    `f=$(printf '%s\\n' "$c" | grep -i plan | head -1); ` +
+    // Sorted, so the pick doesn't depend on filesystem order (ext4 vs APFS); "plan"
+    // is matched in the filename only, since the id or $HOME may contain it too.
+    `c=$(find "${base}" -maxdepth 6 -type f -name '*.md' -path "*${id}*" ! -name 'walkthrough.md' 2>/dev/null | sort); ` +
+    `f=$(printf '%s\\n' "$c" | grep -i 'plan[^/]*$' | head -1); ` +
     `[ -z "$f" ] && f=$(printf '%s\\n' "$c" | head -1); ` +
     `if [ -n "$f" ]; then echo "@@FILE@@$f"; cat "$f"; ` +
     `else echo "@@NONE@@"; find "${base}" -maxdepth 6 -path "*${id}*" 2>/dev/null | head -20; fi`;
