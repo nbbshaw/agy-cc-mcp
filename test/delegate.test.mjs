@@ -967,19 +967,22 @@ describe("plan mode artifact", () => {
       stub: { default: { json: agyJson({ conversation_id: "conv-plan-select" }) } },
     });
     try {
+      // The id deliberately contains "plan", so every candidate's full path does too:
+      // only the filename may decide. "the-plan.md" sorts after "notes.md", so a
+      // whole-path match picks notes.md on every filesystem, not just on APFS.
       const planDir = path.join(bridge.home, ".gemini", "antigravity-cli", "brain", "conv-plan-select");
       fs.mkdirSync(planDir, { recursive: true });
       fs.writeFileSync(path.join(planDir, "walkthrough.md"), "walkthrough body");
       fs.writeFileSync(path.join(planDir, "notes.md"), "notes body");
-      fs.writeFileSync(path.join(planDir, "my-plan.md"), "plan body");
+      fs.writeFileSync(path.join(planDir, "the-plan.md"), "plan body");
 
       await bridge.initialize();
       const res1 = await bridge.callTool("delegate", { task: "plan select", cwd: root, mode: "plan" });
-      assert.ok(res1.text.includes("plan body"));
+      assert.ok(res1.text.includes("plan body"), `expected the-plan.md to be chosen:\n${res1.text}`);
       assert.equal(res1.text.includes("notes body"), false);
       assert.equal(res1.text.includes("walkthrough body"), false);
 
-      fs.unlinkSync(path.join(planDir, "my-plan.md"));
+      fs.unlinkSync(path.join(planDir, "the-plan.md"));
       const res2 = await bridge.callTool("delegate", { task: "plan fallback", cwd: root, mode: "plan" });
       assert.ok(res2.text.includes("notes body"));
       assert.equal(res2.text.includes("walkthrough body"), false);

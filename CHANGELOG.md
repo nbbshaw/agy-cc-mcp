@@ -7,6 +7,12 @@
   the first line. That space is part of git's status code, so an unstaged ` M file` showed
   up as `M file`, which reads as staged. The new test suite found this.
 
+- **Fix: plan mode now reliably picks the plan file.** The lookup searched each file's
+  whole path for "plan", not just its name. If the conversation id or `$HOME` contained
+  "plan", every candidate matched. The bridge then took whichever file `find` listed first,
+  which could be the wrong one depending on filesystem order. The macOS CI run caught this.
+  The lookup now matches the filename only and sorts the candidates.
+
 - Add a `node:test` suite, run with `npm test`. It covers the MCP plumbing, every tool,
   the dev loader and release packaging. The suite drives the real server over stdio with a
   scriptable stub in place of agy that records the argv, cwd, env and stdin of every call,
