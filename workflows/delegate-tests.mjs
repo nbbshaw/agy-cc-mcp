@@ -22,7 +22,7 @@ export const meta = {
 }
 
 const REPO = args?.repo
-if (!REPO) throw new Error('args.repo is required: the absolute repo path (WSL path if the bridge runs in WSL mode)')
+if (!REPO) throw new Error('args.repo is required: the absolute repo path (a Windows path is fine in WSL mode)')
 const FOCUS = args?.focus ?? 'the whole repository'
 const MAX_TARGETS = args?.max ?? 4
 

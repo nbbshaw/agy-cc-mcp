@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.1
+
+- **Fix: Windows paths are translated in WSL mode instead of refused.** Claude Code on
+  Windows passes `cwd` as `C:\Users\you\repo`; the bridge only understood `/mnt/c/...`, so
+  every delegation from a Windows session was rejected as "not inside AGY_ALLOWED_ROOTS"
+  even when the directory was allowed. Drive paths become `/mnt/<drive>/...` and
+  `\\wsl.localhost\<distro>\...` paths become distro paths, for `cwd` on every tool and for
+  `add_dir`. Normalisation still runs after translation, so `C:\allowed\..\..` is refused.
+
+- **Fix: the git digest comes from Windows git for repos under `/mnt/<drive>`.** Git inside
+  WSL can't follow a worktree's `gitdir: C:/...` pointer, so every Claude Code worktree was
+  reported as "not a git repository"; and with `core.autocrlf` it lists every text file in
+  a clean checkout as modified. Falls back to git in the distro if Windows git isn't found.
+
+- Add `test/wsl-paths.mjs`: spawns the server with a stub agy in WSL and asserts that a
+  Windows `cwd` runs in the translated path, `add_dir` is translated, `..` out of the roots
+  is still refused, and the digest's HEAD and touched-path count match Windows git.
+
+- README: a single-line PowerShell form of `claude mcp add`. The multi-line bash form,
+  pasted into PowerShell, registers a server whose command is a literal `\`.
+
 ## 1.3.0
 
 - **Fix: long delegations no longer die on the client's request timeout.** A real

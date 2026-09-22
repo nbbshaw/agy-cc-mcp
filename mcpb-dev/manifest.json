@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "agy-bridge-dev",
   "display_name": "Antigravity (agy) Bridge — dev",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Development build of the agy bridge: runs your working copy on disk, so edits need only a server restart.",
   "long_description": "Identical to the agy bridge extension except that it loads the server from a file you point it at rather than from a copy inside the bundle. Install this while iterating on the bridge, and the packaged build for normal use. Do not enable both at once — they expose the same tool names.",
   "author": { "name": "Nikolas Bradshaw" },

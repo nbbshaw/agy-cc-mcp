@@ -68,8 +68,20 @@ claude mcp add agy --scope user \
   -- node /path/to/agy-bridge.mjs
 ```
 
+On Windows, with agy in WSL, run it as one line — PowerShell doesn't treat `\` as a line
+continuation, and the multi-line form above registers a server whose command is a literal
+`\` (it then fails with "Connection closed"):
+
+```powershell
+claude mcp add agy --scope user -e AGY_WSL_DISTRO=Ubuntu-26.04 -e AGY_ALLOWED_ROOTS=/mnt/c/Users/you/code -e AGY_DEFAULT_MODEL=gemini-3.8-flash-high -- node C:/path/to/agy-bridge.mjs
+```
+
+Claude can then pass Windows paths (`C:\Users\you\code\repo`) as `cwd`; the bridge
+translates them to `/mnt/c/...`. `AGY_ALLOWED_ROOTS` itself stays in WSL form.
+
 User scope makes the tools available to every project and to subagents — which is what
-lets Ultracode workflow agents delegate.
+lets Ultracode workflow agents delegate. The tools then appear as `mcp__agy__delegate` and
+so on, which are the names `agents/gemini-delegate.md` and the workflow expect.
 
 ### 4. Optional
 
