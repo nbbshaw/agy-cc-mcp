@@ -280,7 +280,9 @@ async function gitInfoAt(cwd, native) {
   return {
     head: head.stdout.trim(),
     diffstat: stat.stdout.trim(),
-    porcelain: status.stdout.trim(),
+    // trimEnd, not trim: the first porcelain line's leading space is its status
+    // column (" M" = unstaged), and trimming it would report "M" (staged).
+    porcelain: status.stdout.trimEnd(),
   };
 }
 

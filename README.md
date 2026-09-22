@@ -35,8 +35,9 @@ substitutes another one silently in `-p` mode
 
 ### 2. Claude Desktop / Cowork — install the extension
 
-Download `agy-bridge.mcpb` and double-click it, or Settings → Extensions → Advanced
-settings → Install Extension…
+Download `agy-bridge.mcpb` from the
+[latest release](https://github.com/nbbshaw/agy-cc-mcp/releases/latest) and double-click
+it, or Settings → Extensions → Advanced settings → Install Extension…
 
 > Recent Claude Desktop builds **ignore `mcpServers` in `claude_desktop_config.json`**.
 > Local MCP servers are installed as `.mcpb` extensions. On an MSIX/Store install the
@@ -169,9 +170,54 @@ names, and having two servers answering to `delegate` is nothing but confusing. 
 normal use with:
 
 ```bash
-cp agy-bridge.mjs mcpb/server/agy-bridge.mjs
-cd mcpb && zip -r ../agy-bridge.mcpb manifest.json server   # or: mcpb pack
+node scripts/pack.mjs          # writes dist/agy-bridge.mcpb, dist/agy-bridge-dev.mcpb, SHA256SUMS
 ```
+
+The packer always takes the root `agy-bridge.mjs` and needs no `zip` binary, so it works the
+same in PowerShell. Its output is reproducible: it normalises line endings and fixes the
+timestamps, so a given commit packs to the same bytes on Windows, macOS or Linux. Use the
+same Node major as the release workflow (24) to get the same bytes, because deflate output
+depends on the zlib that Node bundles. Keep the committed
+`mcpb/server/agy-bridge.mjs` copy in step as well (`cp agy-bridge.mjs mcpb/server/`), or
+`npm run check` and CI will fail.
+
+### Testing
+
+```bash
+npm test                 # node:test suites in test/*.test.mjs
+npm run test:heartbeat   # progress-notification regression (Linux/macOS/WSL)
+npm run test:wsl         # Windows paths against agy in WSL (Windows only)
+npm run check            # versions, changelog and the bundled server copy agree
+```
+
+The suites spawn the real server over stdio, as an MCP client would, and put a scriptable
+stub in place of agy (`test/helpers/harness.mjs`). The stub records every invocation, so
+tests can assert on the exact argv, cwd, env and stdin the bridge produced. No agy install
+or sign-in is needed, and no model is called. Tests that run the stub need a POSIX shell,
+so on native Windows they show as skipped. To run them there, use WSL, calling node
+directly: without npm in the distro, `npm` resolves to the Windows one through interop,
+and every stub test is skipped again.
+
+```powershell
+wsl -d Ubuntu-26.04 -- bash -lc "cd /mnt/c/path/to/agy-cc-mcp && node --test test/*.test.mjs"
+```
+
+To test the bundled copy instead of the working source, set
+`AGY_BRIDGE_ENTRY=mcpb/server/agy-bridge.mjs`.
+
+### Releasing
+
+1. Bump `SERVER_VERSION` in `agy-bridge.mjs` and `version` in both manifests, copy the
+   source to `mcpb/server/`, and rename the changelog's `## Unreleased` heading to the new
+   version. `npm run check` confirms that everything agrees.
+2. Merge to `main`, then tag that commit and push the tag:
+   `git tag v1.4.0 && git push origin v1.4.0`.
+
+The Release workflow reruns the full CI matrix and refuses a tag that isn't on `main` or
+doesn't match the version. It then builds the bundles with `scripts/pack.mjs` and publishes a
+GitHub release with `agy-bridge.mcpb`, `agy-bridge-dev.mcpb`, `agy-bridge.mjs` and
+`SHA256SUMS`. The notes come from the matching changelog section. A tag containing `-`
+(for example `v1.4.0-rc.1`) becomes a pre-release.
 
 ## Implementation notes
 
